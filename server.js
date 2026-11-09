@@ -1,8 +1,10 @@
 const express = require('express');
+const { body, param, validationResult } = require('express-validator');
+
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Zadanie 4.3 a) Własny middleware logger z czasem rozpoczęcia
+// Zadanie 4.3 a) Middleware rejestrujące metodę, URL i czas rozpoczęcia
 const logger = (req, res, next) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${req.method} ${req.url}`);
@@ -10,27 +12,23 @@ const logger = (req, res, next) => {
 };
 app.use(logger);
 
-// Zadanie 4.3 b) Odczyt danych JSON
+// Zadanie 4.3 b, c) Wbudowane middleware
 app.use(express.json());
-
-// Zadanie 4.3 c) Formularze i pliki statyczne
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static('public'));
 
-// Zadanie 4.3 c) Router z middleware na poziomie routera (router.use())
+// Demonstracja routera z middleware (router.use())
 const demoRouter = express.Router();
 demoRouter.use((req, res, next) => {
   console.log(`[Router Middleware] Obsługa trasy wewnątrz routera: ${req.method} ${req.originalUrl}`);
   next();
 });
 demoRouter.get('/test', (req, res) => {
-  res.json({
-    message: 'Odpowiedź z routera z middleware router.use()'
-  });
+  res.json({ message: 'Odpowiedź z routera z middleware router.use()' });
 });
 app.use('/demo', demoRouter);
 
-// Trasy z poprzednich zadań
+// Trasy podstawowe
 app.get('/', (req, res) => {
   res.send('Witaj w aplikacji Express!');
 });
@@ -53,68 +51,117 @@ app.get('/api/info', (req, res) => {
   });
 });
 
-// Zadanie 4.2 b) Parametry zapytania (req.query)
+// Zadanie 4.4 a) Model danych przechowywany w pamięci procesu
+let users = [
+  { id: 1, name: 'Jan Kowalski', email: 'jan@example.com' },
+  { id: 2, name: 'Anna Nowak', email: 'anna@example.com' }
+];
+
+// Wyszukiwanie użytkowników (przed trasą :id)
 app.get('/api/users/search', (req, res) => {
   const { name, page = 1 } = req.query;
-  res.status(200).json({ name, page });
+  let results = users;
+  if (name) {
+    results = results.filter(u => u.name.toLowerCase().includes(name.toLowerCase()));
+  }
+  res.status(200).json({ results, page: Number(page) });
 });
 
-// Zadanie 4.2 a) Parametry ścieżki (req.params)
-app.get('/api/users/:id', (req, res) => {
-  const id = req.params.id;
-  const numId = Number(id);
-
-  if (isNaN(numId)) {
-    return res.status(400).json({ error: 'Identyfikator musi być liczbą' });
-  }
-
-  if (numId === 999) {
-    return res.status(404).json({ error: 'Użytkownik nie znaleziony' });
-  }
-
-  res.status(200).json({
-    message: 'Pobrano użytkownika',
-    id: id
-  });
+// Zadanie 4.4 a) GET /api/users - pobranie listy wszystkich użytkowników
+app.get('/api/users', (req, res) => {
+  res.status(200).json(users);
 });
 
-// Zadanie 4.3 b) POST z odczytem req.body po włączeniu express.json()
-app.post('/api/users', (req, res) => {
-  const user = req.body;
-  res.status(201).json(user);
-});
+// Zadanie 4.4 a, b) GET /api/users/:id - pobranie użytkownika po ID
+app.get('/api/users/:id',
+  param('id').isInt().withMessage('Identyfikator musi być liczbą całkowitą'),
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-app.put('/api/users/:id', (req, res) => {
-  const numId = Number(req.params.id);
+    const id = Number(req.params.id);
+    const user = users.find(u => u.id === id);
 
-  if (isNaN(numId)) {
-    return res.status(400).json({ error: 'Identyfikator musi być liczbą' });
+    if (!user) {
+      return res.status(404).json({ error: 'Użytkownik nie został znaleziony' });
+    }
+
+    res.status(200).json(user);
   }
+);
 
-  if (numId === 999) {
-    return res.status(404).json({ error: 'Użytkownik nie znaleziony' });
+// Zadanie 4.4 a, b) POST /api/users - dodawanie użytkownika z walidacją
+app.post('/api/users',
+  body('name').trim().notEmpty().withMessage('Pole name jest wymagane'),
+  body('email').isEmail().withMessage('Pole email musi być poprawnym adresem email'),
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const nextId = users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1;
+    const newUser = {
+      id: nextId,
+      name: req.body.name.trim(),
+      email: req.body.email
+    };
+
+    users.push(newUser);
+    res.status(201).json(newUser);
   }
+);
 
-  res.status(200).json({
-    message: 'Użytkownik zaktualizowany',
-    id: numId,
-    data: req.body
-  });
-});
+// Zadanie 4.4 a, b) PUT /api/users/:id - aktualizacja użytkownika z walidacją
+app.put('/api/users/:id',
+  param('id').isInt().withMessage('Identyfikator musi być liczbą całkowitą'),
+  body('name').trim().notEmpty().withMessage('Pole name jest wymagane'),
+  body('email').isEmail().withMessage('Pole email musi być poprawnym adresem email'),
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-app.delete('/api/users/:id', (req, res) => {
-  const numId = Number(req.params.id);
+    const id = Number(req.params.id);
+    const userIndex = users.findIndex(u => u.id === id);
 
-  if (isNaN(numId)) {
-    return res.status(400).json({ error: 'Identyfikator musi być liczbą' });
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'Użytkownik nie został znaleziony' });
+    }
+
+    users[userIndex] = {
+      id,
+      name: req.body.name.trim(),
+      email: req.body.email
+    };
+
+    res.status(200).json(users[userIndex]);
   }
+);
 
-  if (numId === 999) {
-    return res.status(404).json({ error: 'Użytkownik nie znaleziony' });
+// Zadanie 4.4 a, b) DELETE /api/users/:id - usunięcie użytkownika
+app.delete('/api/users/:id',
+  param('id').isInt().withMessage('Identyfikator musi być liczbą całkowitą'),
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const id = Number(req.params.id);
+    const userIndex = users.findIndex(u => u.id === id);
+
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'Użytkownik nie został znaleziony' });
+    }
+
+    users.splice(userIndex, 1);
+    res.status(204).send();
   }
-
-  res.status(204).send();
-});
+);
 
 app.listen(port, () => {
   console.log(`Serwer działa na porcie ${port}`);
