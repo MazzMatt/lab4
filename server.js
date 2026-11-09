@@ -2,12 +2,48 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Zadanie 4.3 a) Własny middleware logger z czasem rozpoczęcia
+const logger = (req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.url}`);
+  next();
+};
+app.use(logger);
+
+// Zadanie 4.3 b) Odczyt danych JSON
+app.use(express.json());
+
+// Zadanie 4.3 c) Formularze i pliki statyczne
+app.use(express.urlencoded({ extended: false }));
+app.use(express.static('public'));
+
+// Zadanie 4.3 c) Router z middleware na poziomie routera (router.use())
+const demoRouter = express.Router();
+demoRouter.use((req, res, next) => {
+  console.log(`[Router Middleware] Obsługa trasy wewnątrz routera: ${req.method} ${req.originalUrl}`);
+  next();
+});
+demoRouter.get('/test', (req, res) => {
+  res.json({
+    message: 'Odpowiedź z routera z middleware router.use()'
+  });
+});
+app.use('/demo', demoRouter);
+
+// Trasy z poprzednich zadań
 app.get('/', (req, res) => {
   res.send('Witaj w aplikacji Express!');
 });
 
 app.get('/contact', (req, res) => {
   res.send('Strona kontaktowa');
+});
+
+app.post('/contact-form', (req, res) => {
+  res.status(200).json({
+    message: 'Odebrano formularz urlencoded',
+    data: req.body
+  });
 });
 
 app.get('/api/info', (req, res) => {
@@ -18,7 +54,6 @@ app.get('/api/info', (req, res) => {
 });
 
 // Zadanie 4.2 b) Parametry zapytania (req.query)
-// Zdefiniowane przed /api/users/:id, aby zapobiec przechwytywaniu "search" jako :id
 app.get('/api/users/search', (req, res) => {
   const { name, page = 1 } = req.query;
   res.status(200).json({ name, page });
@@ -43,12 +78,10 @@ app.get('/api/users/:id', (req, res) => {
   });
 });
 
-// Zadanie 4.2 c) Metody HTTP i kody statusu (POST, PUT, DELETE)
+// Zadanie 4.3 b) POST z odczytem req.body po włączeniu express.json()
 app.post('/api/users', (req, res) => {
-  // Przykładowy status 201 Created
-  res.status(201).json({
-    message: 'Użytkownik utworzony'
-  });
+  const user = req.body;
+  res.status(201).json(user);
 });
 
 app.put('/api/users/:id', (req, res) => {
@@ -64,7 +97,8 @@ app.put('/api/users/:id', (req, res) => {
 
   res.status(200).json({
     message: 'Użytkownik zaktualizowany',
-    id: numId
+    id: numId,
+    data: req.body
   });
 });
 
@@ -79,7 +113,6 @@ app.delete('/api/users/:id', (req, res) => {
     return res.status(404).json({ error: 'Użytkownik nie znaleziony' });
   }
 
-  // Status 204 No Content
   res.status(204).send();
 });
 
