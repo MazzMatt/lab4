@@ -1,15 +1,23 @@
 const express = require('express');
+const { engine } = require('express-handlebars');
 const logger = require('./middleware/logger');
 const errorHandler = require('./middleware/errorHandler');
 const usersRouter = require('./routes/users.routes');
+const usersService = require('./services/users.service');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Zadanie 4.6 a) Konfiguracja silnika szablonów Handlebars
+app.engine('handlebars', engine({
+  defaultLayout: 'main'
+}));
+app.set('view engine', 'handlebars');
+
 // Zadanie 4.3 a) Middleware logujący
 app.use(logger);
 
-// Zadanie 4.3 b, c) Middleware do obsługi JSON i formularzy oraz plików statycznych
+// Zadanie 4.3 b, c) Middleware do obsługi JSON, formularzy i plików statycznych
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static('public'));
@@ -25,7 +33,7 @@ demoRouter.get('/test', (req, res) => {
 });
 app.use('/demo', demoRouter);
 
-// Trasy informacyjne i formularz
+// Trasy podstawowe
 app.get('/', (req, res) => {
   res.send('Witaj w aplikacji Express!');
 });
@@ -48,7 +56,42 @@ app.get('/api/info', (req, res) => {
   });
 });
 
-// Zadanie 4.5: Podłączenie routera użytkowników
+// Zadanie 4.6 b) Widok listy użytkowników (SSR)
+app.get('/users', async (req, res, next) => {
+  try {
+    const users = await usersService.getUsers();
+    res.render('users/list', {
+      title: 'Lista użytkowników',
+      users
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Zadanie 4.6 c) Widok szczegółów użytkownika (SSR)
+app.get('/users/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).send('Nieprawidłowy identyfikator');
+    }
+
+    const user = await usersService.getUserById(id);
+    if (!user) {
+      return res.status(404).send('Użytkownik nie został znaleziony');
+    }
+
+    res.render('users/details', {
+      title: `Szczegóły: ${user.name}`,
+      user
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Zadanie 4.5: Trasy REST API (rozdzielone od widoków SSR)
 app.use('/api/users', usersRouter);
 
 // Zadanie 4.5 d) Test asynchronicznej propagacji błędów do errorHandler w Express 5

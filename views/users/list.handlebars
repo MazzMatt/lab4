@@ -1,0 +1,13 @@
+<h1>{{title}}</h1>
+
+{{#if users.length}}
+  <ul>
+    {{#each users}}
+      <li>
+        <a href="/users/{{id}}"><strong>{{name}}</strong></a> – {{email}}
+      </li>
+    {{/each}}
+  </ul>
+{{else}}
+  <p>Brak użytkowników do wyświetlenia.</p>
+{{/if}}
